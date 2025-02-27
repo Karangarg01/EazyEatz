@@ -37,9 +37,11 @@ async def dialogflow_webhook(request: Request):
     # logging.debug(f"Intent: {intent}, Parameters: {parameters}, Session: {session_id}")
 
     # Intent mapping for better structure
-    intent_handlers = {
-        "track.order-context: ongoing-tracking": track_order,
-        "order.add-context: ongoing-order": add_to_order,
+    intent_handlers= {
+        'order.add-context: ongoing-order': add_to_order,
+        'order.remove-context: ongoing-order': remove_from_order,
+        'complete.order-context: ongoing-order': complete_order,
+        'track.order-context: ongoing-tracking': track_order
     }
 
     # Call the respective function or return default response
@@ -73,36 +75,138 @@ async def track_order(parameters: dict, session_id: str):
 
     return JSONResponse(content={"fulfillmentText": fulfillment_text})
 
+
 async def add_to_order(parameters: dict, session_id: str):
     """
     Adds items to the temporary order buffer from Dialogflow parameters.
+    Stores data in the format: {quantity: food_item}.
     """
-    quantities = parameters.get("number")
-    food_items = parameters.get("food_item")
+    quantities = parameters.get("number", [])
+    food_items = parameters.get("food_item", [])
 
     if not food_items:
         return JSONResponse(content={"fulfillmentText": "I didn't catch the food items. Could you repeat that?"})
 
-    # Ensure lists are the same length
     if len(food_items) != len(quantities):
         return JSONResponse(content={"fulfillmentText": "Please provide a quantity for each food item."})
 
-    new_food_dict = dict(zip(quantities, food_items))
+    # Ensure quantities are integers and store each item separately
+    new_food_dict = {}
+    for qty, item in zip(quantities, food_items):
+        qty = int(qty)  # Convert float to int
+        if qty in new_food_dict:
+            new_food_dict[qty].append(item)  # Store multiple items separately
+        else:
+            new_food_dict[qty] = [item]
 
+    # Check if session exists and update instead of replacing
     if session_id in inprogress_orders:
         current_food_dict = inprogress_orders[session_id]
-        current_food_dict.update(new_food_dict)
-        inprogress_orders[session_id] = current_food_dict
+
+        for qty, items in new_food_dict.items():
+            if qty in current_food_dict:
+                current_food_dict[qty].extend(items)  # Append items separately
+            else:
+                current_food_dict[qty] = items  # Add new quantity entry
 
     else:
-        inprogress_orders[session_id] = new_food_dict
+        inprogress_orders[session_id] = new_food_dict  # Create new order entry
 
-        # session_id ---> dict
-        # 456 --> {2:'Pizza'}
+    print("Updated order dictionary:", inprogress_orders)
 
-    print(inprogress_orders)
     order_str = generic_helper.get_str_from_food_dict(inprogress_orders[session_id])
-    print(order_str)
-    fulfillment_text = f"So far, you have ordered: {order_str}. Do you need anything else?, {inprogress_orders[session_id]}"
+    fulfillment_text = f"So far, you have ordered: {order_str}. Do you need anything else?"
 
     return JSONResponse(content={"fulfillmentText": fulfillment_text})
+
+
+
+async def remove_from_order(parameters: dict, session_id: str):
+    if session_id not in inprogress_orders:
+        return JSONResponse(content={
+            "fulfillmentText": "I'm having a trouble finding your order. Sorry! Can you place a new order please?"
+        })
+
+    food_items = parameters["food-item"]
+    current_order = inprogress_orders[session_id]
+
+    removed_items = []
+    no_such_items = []
+
+    for item in food_items:
+        if item not in current_order:
+            no_such_items.append(item)
+        else:
+            removed_items.append(item)
+            del current_order[item]
+
+    if len(removed_items) > 0:
+        fulfillment_text = f'Removed {",".join(removed_items)} from your order!'
+
+    if len(no_such_items) > 0:
+        fulfillment_text = f' Your current order does not have {",".join(no_such_items)}'
+
+    if len(current_order.keys()) == 0:
+        fulfillment_text = " Your order is empty!"
+    else:
+        order_str = generic_helper.get_str_from_food_dict(current_order)
+        fulfillment_text = f" Here is what is left in your order: {order_str}"
+
+    return JSONResponse(content={
+        "fulfillmentText": fulfillment_text
+    })
+
+async def save_to_db(order: dict):
+    """Saves the order to the database and returns the order ID."""
+    next_order_id = db_helper.get_next_order_id()
+
+    # Insert each food item with its quantity into the database
+    for quantity, food_items in order.items():
+        for food_item in food_items:  # Handle multiple items per quantity
+            rcode = db_helper.insert_order_item(
+                food_item,
+                quantity,
+                next_order_id
+            )
+            if rcode == -1:
+                return -1  # Return error if DB insertion fails
+
+    # Insert order tracking status
+    db_helper.insert_order_tracking(next_order_id, "in progress")
+
+    return next_order_id # Return the new order ID
+
+
+async def complete_order(parameters: dict, session_id: str):
+    """Finalizes an order, saves it to the database, and returns a confirmation message."""
+    if session_id not in inprogress_orders:
+        return JSONResponse(content={
+            "fulfillmentText": "I'm having trouble finding your order. Sorry! Can you place a new order, please?"
+        })
+
+    # Retrieve order details and save to DB
+    order = inprogress_orders[session_id]
+    order_id = await save_to_db(order)  # 🔹 FIX: Added `await`
+
+    if order_id == -1:
+        fulfillment_text = (
+            f"Food item is not available in the Menu. Please order from the menu only!"
+
+        )
+    else:
+        order_total = db_helper.get_total_order_price(order_id)
+        fulfillment_text = (
+            f"Awesome! Your order has been placed successfully. "
+            f"Here is your order ID: #{order_id}. "
+            f"Your total is {order_total}, payable upon delivery!"
+        )
+
+    # Remove session data after order completion
+    del inprogress_orders[session_id]
+
+    return JSONResponse(content={"fulfillmentText": fulfillment_text})
+
+
+# if __name__ == "__main__":
+#
+#     print(inprogress_orders)
