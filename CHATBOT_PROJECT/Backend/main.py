@@ -2,8 +2,12 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import asyncio
+
+from spacy.pipeline.span_ruler import prioritize_new_ents_filter
+
 import db_helper
 import generic_helper
+from typing import List
 
 app = FastAPI()
 inprogress_orders= {}
@@ -124,37 +128,57 @@ async def add_to_order(parameters: dict, session_id: str):
 async def remove_from_order(parameters: dict, session_id: str):
     if session_id not in inprogress_orders:
         return JSONResponse(content={
-            "fulfillmentText": "I'm having a trouble finding your order. Sorry! Can you place a new order please?"
+            "fulfillmentText": "I'm having trouble finding your order. Can you place a new one?"
         })
 
-    food_items = parameters["food-item"]
-    current_order = inprogress_orders[session_id]
+    food_items = parameters.get("food_item", [])
+    if not food_items:
+        return JSONResponse(content={
+            "fulfillmentText": "Please specify which items you want to remove."
+        })
 
+    current_order = inprogress_orders[session_id]
     removed_items = []
     no_such_items = []
+    keys_to_remove = []
 
     for item in food_items:
-        if item not in current_order:
-            no_such_items.append(item)
+        found_key = None
+        for quantity, food_list in list(current_order.items()):
+            if isinstance(food_list, list) and food_list[0].lower() == item.lower():
+                found_key = quantity
+                break  # Stop searching once found
+
+        if found_key is not None:
+            removed_items.append(f"{current_order[found_key][0]} {found_key} ")
+            keys_to_remove.append(found_key)
         else:
-            removed_items.append(item)
-            del current_order[item]
+            no_such_items.append(item)
 
-    if len(removed_items) > 0:
-        fulfillment_text = f'Removed {",".join(removed_items)} from your order!'
+    # Remove items after loop to avoid modifying dictionary mid-iteration
+    for key in keys_to_remove:
+        del current_order[key]
 
-    if len(no_such_items) > 0:
-        fulfillment_text = f' Your current order does not have {",".join(no_such_items)}'
+    fulfillment_text = ""
 
-    if len(current_order.keys()) == 0:
-        fulfillment_text = " Your order is empty!"
+    if removed_items:
+        fulfillment_text += f"Removed {', '.join(removed_items)} from your order! "
+
+    if no_such_items:
+        fulfillment_text += f"Your current order does not have {', '.join(no_such_items)}. "
+
+    if not current_order:
+        fulfillment_text += "Your order is now empty!"
+        del inprogress_orders[session_id]
     else:
         order_str = generic_helper.get_str_from_food_dict(current_order)
-        fulfillment_text = f" Here is what is left in your order: {order_str}"
+        fulfillment_text += f"Here is what remains in your order: {order_str}"
 
-    return JSONResponse(content={
-        "fulfillmentText": fulfillment_text
-    })
+    return JSONResponse(content={"fulfillmentText": fulfillment_text})
+
+
+
+
 
 async def save_to_db(order: dict):
     """Saves the order to the database and returns the order ID."""
@@ -206,7 +230,3 @@ async def complete_order(parameters: dict, session_id: str):
 
     return JSONResponse(content={"fulfillmentText": fulfillment_text})
 
-
-# if __name__ == "__main__":
-#
-#     print(inprogress_orders)
