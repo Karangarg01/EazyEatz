@@ -1,62 +1,24 @@
-global cnx
 import os
-import mysql.connector
-from urllib.parse import urlparse
+import pymysql
+from sqlalchemy import create_engine
 
-# Get Database URL from Environment Variables
-'''
+# Get the DATABASE_URL from environment variables
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Parse the MySQL connection string
-if DATABASE_URL:
-    db_config = DATABASE_URL.replace("mysql://", "").split("@")
-    user_pass, host_db = db_config[0].split(":"), db_config[1].split("/")
-    username, password = user_pass[0], user_pass[1]
-    host_port, database = host_db[0].split(":"), host_db[1]
-
-    host, port = host_port[0], int(host_port[1])
-
-    # Establish Connection
-    cnx = mysql.connector.connect(
-        user=username,
-        password=password,
-        host=host,
-        port=port,
-        database=database
-    )
-else:
+if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is not set!")
 
-'''
-import os
-import mysql.connector
-from dotenv import load_dotenv
+# Ensure the URL uses pymysql
+if DATABASE_URL.startswith("mysql://"):
+    DATABASE_URL = DATABASE_URL.replace("mysql://", "mysql+pymysql://")
 
-# Load environment variables
-load_dotenv()
+# Create the database engine
+engine = create_engine(DATABASE_URL)
 
-# Get database URL from environment variables
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-if DATABASE_URL:
-    db_config = DATABASE_URL.replace("mysql://", "").split("@")
-    user_pass, host_db = db_config[0].split(":"), db_config[1].split("/")
-    username, password = user_pass[0], user_pass[1]
-    host_port, database = host_db[0].split(":"), host_db[1]
+# Create the database engine
+engine = create_engine(DATABASE_URL)
 
-    host, port = host_port[0], int(host_port[1])
-
-    # Establish Connection
-    cnx = mysql.connector.connect(
-        user=username,
-        password=password,
-        host=host,
-        port=port,
-        database=database
-    )
-    print("✅ Connected to MySQL successfully!")
-else:
-    raise ValueError("DATABASE_URL environment variable is not set!")
 
 # Function to get database connection
 def get_db_connection():
