@@ -114,9 +114,3 @@ def get_order_status(order_id):
     else:
         return None
 
-'''
-if __name__ == "__main__":
-    # print(get_next_order_id())
-    rcode = insert_order_item('Samosa',2,43)
-    print(rcode)
-'''
