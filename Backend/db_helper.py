@@ -3,30 +3,60 @@ import os
 import mysql.connector
 from urllib.parse import urlparse
 
-# Fetch DATABASE_URL from environment variables
-DATABASE_URL = os.getenv("mysql://root:czQQnVPjEscYzwtXJcUHoGmcOInfPDfy@shortline.proxy.rlwy.net:34427/railway")
+# Get Database URL from Environment Variables
+'''
+DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Parse the MySQL connection string
 if DATABASE_URL:
-    # Parse the DATABASE_URL
-    parsed_url = urlparse(DATABASE_URL)
+    db_config = DATABASE_URL.replace("mysql://", "").split("@")
+    user_pass, host_db = db_config[0].split(":"), db_config[1].split("/")
+    username, password = user_pass[0], user_pass[1]
+    host_port, database = host_db[0].split(":"), host_db[1]
 
-    user = parsed_url.username
-    password = parsed_url.password
-    host = parsed_url.hostname
-    port = parsed_url.port or 3306  # Default MySQL port
-    database = parsed_url.path.lstrip('/')  # Remove the leading '/'
+    host, port = host_port[0], int(host_port[1])
 
-    # Connect to MySQL database
+    # Establish Connection
     cnx = mysql.connector.connect(
-        user=user,
+        user=username,
         password=password,
         host=host,
         port=port,
         database=database
     )
 else:
-    raise Exception("DATABASE_URL is not set in environment variables!")
+    raise ValueError("DATABASE_URL environment variable is not set!")
 
+'''
+import os
+import mysql.connector
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Get database URL from environment variables
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if DATABASE_URL:
+    db_config = DATABASE_URL.replace("mysql://", "").split("@")
+    user_pass, host_db = db_config[0].split(":"), db_config[1].split("/")
+    username, password = user_pass[0], user_pass[1]
+    host_port, database = host_db[0].split(":"), host_db[1]
+
+    host, port = host_port[0], int(host_port[1])
+
+    # Establish Connection
+    cnx = mysql.connector.connect(
+        user=username,
+        password=password,
+        host=host,
+        port=port,
+        database=database
+    )
+    print("✅ Connected to MySQL successfully!")
+else:
+    raise ValueError("DATABASE_URL environment variable is not set!")
 
 # Function to get database connection
 def get_db_connection():
