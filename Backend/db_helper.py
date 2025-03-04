@@ -1,15 +1,39 @@
-import mysql.connector
 global cnx
-
-cnx = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="root",
-    database="pandeyji_eatery"
-)
-
-# Function to call the MySQL stored procedure and insert an order item
+import os
 import mysql.connector
+from urllib.parse import urlparse
+
+# Fetch DATABASE_URL from environment variables
+DATABASE_URL = os.getenv("mysql://root:czQQnVPjEscYzwtXJcUHoGmcOInfPDfy@shortline.proxy.rlwy.net:34427/railway")
+
+if DATABASE_URL:
+    # Parse the DATABASE_URL
+    parsed_url = urlparse(DATABASE_URL)
+
+    user = parsed_url.username
+    password = parsed_url.password
+    host = parsed_url.hostname
+    port = parsed_url.port or 3306  # Default MySQL port
+    database = parsed_url.path.lstrip('/')  # Remove the leading '/'
+
+    # Connect to MySQL database
+    cnx = mysql.connector.connect(
+        user=user,
+        password=password,
+        host=host,
+        port=port,
+        database=database
+    )
+else:
+    raise Exception("DATABASE_URL is not set in environment variables!")
+
+
+# Function to get database connection
+def get_db_connection():
+    if not cnx.is_connected():
+        cnx.reconnect()
+    return cnx
+
 
 def insert_order_item(food_name, quantity, order_id):
     """Inserts an item into the orders table by looking up item_id and price from the food_items table."""
