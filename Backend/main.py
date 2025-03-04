@@ -2,12 +2,18 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import asyncio
+import spacy
 
 from spacy.pipeline.span_ruler import prioritize_new_ents_filter
 
 import db_helper
 import generic_helper
-from typing import List
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    import subprocess
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
 
 app = FastAPI()
 inprogress_orders= {}
