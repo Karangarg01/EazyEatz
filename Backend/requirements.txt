@@ -1,5 +1,4 @@
 fastapi[all]
 uvicorn
 mysql-connector-python
-pymysql
 sqlalchemy
