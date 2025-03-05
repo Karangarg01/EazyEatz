@@ -1,31 +1,50 @@
 import os
-import pymysql
-from sqlalchemy import create_engine
 import mysql.connector
+from sqlalchemy import create_engine
 
 # Get the DATABASE_URL from environment variables
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv(r"mysql://root:czQQnVPjEscYzwtXJcUHoGmcOInfPDfy@shortline.proxy.rlwy.net:34427/railway")
 
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is not set!")
 
-# Ensure the URL uses pymysql
-if DATABASE_URL.startswith("mysql://"):
-    DATABASE_URL = DATABASE_URL.replace("mysql://", "mysql+pymysql://")
+# Create database connection details manually (since `pymysql` is removed)
+DB_HOST = os.getenv("DB_HOST", "shortline.proxy.rlwy.net")
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "czQQnVPjEscYzwtXJcUHoGmcOInfPDfy")
+DB_NAME = os.getenv("DB_NAME", "railway")
+DB_PORT = int(os.getenv("DB_PORT", 34427))
 
-# Create the database engine
-engine = create_engine(DATABASE_URL)
-
-# Establish a MySQL connection
+# Create MySQL connection
 def get_db_connection():
-    """Creates and returns a new database connection."""
+    """Creates and returns a new MySQL connection using mysql-connector-python."""
     return mysql.connector.connect(
-        host=os.getenv("DB_HOST", "shortline.proxy.rlwy.net"),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", "czQQnVPjEscYzwtXJcUHoGmcOInfPDfy"),
-        database=os.getenv("DB_NAME", "railway"),
-        port=int(os.getenv("DB_PORT", 34427))
+        host=DB_HOST,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME,
+        port=DB_PORT
     )
+
+# Establish a global connection
+cnx = get_db_connection()
+
+# Function to check if connection works
+def test_connection():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT DATABASE();")
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return f"✅ Connected to Database: {result[0]}"
+    except mysql.connector.Error as e:
+        return f"🚨 Database Error: {e}"
+
+# Example usage:
+print(test_connection())
+
 
 # Global connection object
 cnx = get_db_connection()
@@ -111,3 +130,6 @@ def get_order_status(order_id):
         return result[0] if result else None
     finally:
         cursor.close()
+
+if __name__ == '__main__':
+    test_connection()
