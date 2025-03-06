@@ -1,10 +1,8 @@
 import re
 
-def get_str_from_food_dict(order_list: list):
-    """
-    Converts a list of (quantity, food_item) tuples into a readable string.
-    """
-    return ", ".join(f"{qty} {item}" for qty, item in order_list)
+def get_str_from_food_dict(order_dict: dict):
+    """Converts a dictionary of {item: quantity} into a readable string."""
+    return ", ".join([f"{qty} {item}" for item, qty in order_dict.items()])
 
 
 def extract_session_id(session_str: str):

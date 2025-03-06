@@ -66,31 +66,45 @@ async def track_order(parameters: dict, session_id: str):
 
     return JSONResponse(content={"fulfillmentText": fulfillment_text})
 
-async def add_to_order(parameters: dict, session_id: str):
-    """Adds items to the temporary order buffer."""
-    quantities = parameters.get("number", [])
+
+def add_to_order(parameters: dict, session_id: str):
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    logging.debug(f"Received parameters: {parameters}")
+
+    # Extract food items and quantities safely
     food_items = parameters.get("food_item", [])
+    quantities = parameters.get("number", [])
 
-    if not food_items:
-        return JSONResponse(content={"fulfillmentText": "I didn't catch the food items. Could you repeat that?"})
+    # Ensure we get single values instead of lists if needed
+    if isinstance(food_items, list) and len(food_items) == 1:
+        food_items = food_items  # Already a list with 1 element
+    if isinstance(quantities, list) and len(quantities) == 1:
+        quantities = [int(quantities[0])]  # Convert to int
 
+    # Validate that we have equal numbers of items and quantities
     if len(food_items) != len(quantities):
-        return JSONResponse(content={"fulfillmentText": "Please provide a quantity for each food item."})
-
-    # Fix: Create tuples of (quantity, food_item)
-    new_orders = [(int(qty), item) for qty, item in zip(quantities, food_items)]
-
-    if session_id in inprogress_orders:
-        inprogress_orders[session_id].extend(new_orders)
+        fulfillment_text = "Sorry, I didn't understand. Can you please specify food items and quantities clearly?"
     else:
-        inprogress_orders[session_id] = new_orders
+        # Create an order dictionary
+        new_food_dict = dict(zip(food_items, quantities))
 
-    print("Updated order list:", inprogress_orders)
+        # Merge with an existing order if present
+        if session_id in inprogress_orders:
+            current_food_dict = inprogress_orders[session_id]
+            for item, qty in new_food_dict.items():
+                current_food_dict[item] = current_food_dict.get(item, 0) + qty
+            inprogress_orders[session_id] = current_food_dict
+        else:
+            inprogress_orders[session_id] = new_food_dict
 
-    order_str = generic_helper.get_str_from_food_dict(inprogress_orders[session_id])
-    fulfillment_text = f"So far, you have ordered: {order_str}. Do you need anything else?"
+        # Generate a readable order string
+        order_str = generic_helper.get_str_from_food_dict(inprogress_orders[session_id])
+        fulfillment_text = f"So far you have: {order_str}. Do you need anything else?"
 
+    logging.debug(f"Final Order: {inprogress_orders[session_id]}")
     return JSONResponse(content={"fulfillmentText": fulfillment_text})
+
 
 
 async def remove_from_order(parameters: dict, session_id: str):
